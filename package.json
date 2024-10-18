@@ -38,7 +38,8 @@
 		"build": "tsc && vite build",
 		"pack-test": "npm pack --dry-run",
 		"preview": "vite preview",
-		"test": "vitest"
+		"test": "vitest",
+		"postinstall": "tsc --outDir ./build"
 	},
 	"devDependencies": {
 		"@types/node": "^20.3.1",
