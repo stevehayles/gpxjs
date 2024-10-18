@@ -184,6 +184,18 @@ export const parseGPXWithCustomParser = (
 				extensions: null,
 			}
 
+			// Parse any extensions and store them in an object
+			const extensionsElement = routePoint.querySelector("extensions")
+			if (extensionsElement !== null) {
+				let extensions: Extensions = {}
+				extensions = parseExtensions(
+					extensions,
+					extensionsElement.childNodes
+				)
+				// Store all available extensions as numbers
+				point.extensions = extensions
+			}
+
 			const rawElevation = parseFloat(
 				getElementValue(routePoint, "ele") ?? ""
 			)
