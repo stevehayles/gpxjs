@@ -1,8 +1,10 @@
 import {
 	calculateDistance,
+	calculateDuration,
 	calculateElevation,
 	calculateSlopes,
 } from "./math_helpers"
+import { DEFAULT_OPTIONS } from "./options"
 import { ParsedGPX } from "./parsed_gpx"
 import {
 	ParsedGPXInputs,
@@ -11,6 +13,7 @@ import {
 	Track,
 	Waypoint,
 	Extensions,
+	Options,
 } from "./types"
 
 /**
@@ -20,16 +23,24 @@ import {
  * @param removeEmptyFields Whether or not to remove null or undefined fields from the output
  * @returns A ParsedGPX with all of the parsed data and a method to convert to GeoJSON
  */
-export const parseGPX = (gpxSource: string, removeEmptyFields: boolean = true) => {
+export const parseGPX = (
+	gpxSource: string,
+	options: Options = DEFAULT_OPTIONS
+) => {
 	const parseMethod = (gpxSource: string): Document | null => {
 		// Verify that we are in a browser
-		if (typeof document == undefined) return null
-
+		if (typeof document === "undefined") return null
+		if (typeof window === "undefined") {
+			console.error(
+				"window is undefined, try to use the parseGPXWithCustomParser method"
+			)
+			return null
+		}
 		const domParser = new window.DOMParser()
 		return domParser.parseFromString(gpxSource, "text/xml")
 	}
-
-	return parseGPXWithCustomParser(gpxSource, parseMethod, removeEmptyFields)
+	const allOptions = { ...DEFAULT_OPTIONS, ...options }
+	return parseGPXWithCustomParser(gpxSource, parseMethod, allOptions)
 }
 
 /**
@@ -44,7 +55,7 @@ export const parseGPX = (gpxSource: string, removeEmptyFields: boolean = true) =
 export const parseGPXWithCustomParser = (
 	gpxSource: string,
 	parseGPXToXML: (gpxSource: string) => Document | null,
-	removeEmptyFields: boolean = true
+	options: Options = DEFAULT_OPTIONS
 ): [null, Error] | [ParsedGPX, null] => {
 	// Parse the GPX string using the given parse method
 	const parsedSource = parseGPXToXML(gpxSource)
@@ -85,18 +96,18 @@ export const parseGPXWithCustomParser = (
 				email:
 					emailElement !== null
 						? {
-							id: emailElement.getAttribute("id") ?? "",
-							domain:
-								emailElement.getAttribute("domain") ?? "",
-						}
+								id: emailElement.getAttribute("id") ?? "",
+								domain:
+									emailElement.getAttribute("domain") ?? "",
+						  }
 						: null,
 				link:
 					linkElement !== null
 						? {
-							href: linkElement.getAttribute("href") ?? "",
-							text: getElementValue(linkElement, "text"),
-							type: getElementValue(linkElement, "type"),
-						}
+								href: linkElement.getAttribute("href") ?? "",
+								text: getElementValue(linkElement, "text"),
+								type: getElementValue(linkElement, "type"),
+						  }
 						: null,
 			}
 		}
@@ -149,6 +160,13 @@ export const parseGPXWithCustomParser = (
 			distance: {
 				cumulative: [],
 				total: 0,
+			},
+			duration: {
+				cumulative: [],
+				movingDuration: 0,
+				totalDuration: 0,
+				endTime: null,
+				startTime: null,
 			},
 			elevation: {
 				maximum: null,
@@ -208,6 +226,11 @@ export const parseGPXWithCustomParser = (
 		}
 
 		route.distance = calculateDistance(route.points)
+		route.duration = calculateDuration(
+			route.points,
+			route.distance,
+			options
+		)
 		route.elevation = calculateElevation(route.points)
 		route.slopes = calculateSlopes(route.points, route.distance.cumulative)
 
@@ -228,6 +251,13 @@ export const parseGPXWithCustomParser = (
 			distance: {
 				cumulative: [],
 				total: 0,
+			},
+			duration: {
+				cumulative: [],
+				movingDuration: 0,
+				totalDuration: 0,
+				startTime: null,
+				endTime: null,
 			},
 			elevation: {
 				maximum: null,
@@ -275,7 +305,9 @@ export const parseGPXWithCustomParser = (
 				point.extensions = extensions
 			}
 
-			const rawElevation = parseFloat(getElementValue(trackPoint, "ele") ?? "")
+			const rawElevation = parseFloat(
+				getElementValue(trackPoint, "ele") ?? ""
+			)
 			point.elevation = isNaN(rawElevation) ? null : rawElevation
 
 			const rawTime = getElementValue(trackPoint, "time")
@@ -285,20 +317,25 @@ export const parseGPXWithCustomParser = (
 		}
 
 		track.distance = calculateDistance(track.points)
+		track.duration = calculateDuration(
+			track.points,
+			track.distance,
+			options
+		)
 		track.elevation = calculateElevation(track.points)
 		track.slopes = calculateSlopes(track.points, track.distance.cumulative)
 
 		output.tracks.push(track)
 	}
 
-	if (removeEmptyFields) {
+	if (options.removeEmptyFields) {
 		deleteNullFields(output.metadata)
 		deleteNullFields(output.waypoints)
 		deleteNullFields(output.tracks)
 		deleteNullFields(output.routes)
 	}
 
-	return [new ParsedGPX(output, removeEmptyFields), null]
+	return [new ParsedGPX(output, options), null]
 }
 
 const parseExtensions = (
@@ -378,8 +415,8 @@ const querySelectDirectDescendant = (
 
 export const deleteNullFields = <T>(object: T) => {
 	// Return non-object values as-is
-	if (typeof object !== 'object' || object === null || object === undefined) {
-		return 
+	if (typeof object !== "object" || object === null || object === undefined) {
+		return
 	}
 
 	// Remove null fields from arrays

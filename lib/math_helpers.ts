@@ -1,4 +1,8 @@
-import { Point, Distance, Elevation } from "./types"
+import { Point, Distance, Elevation, Duration, Options } from "./types"
+
+import { DEFAULT_OPTIONS } from "./options"
+
+export type MathHelperFunction = (points: Point[], ...args: any[]) => any
 
 /**
  * Calculates the distances along a series of points using the haversine formula internally.
@@ -6,7 +10,9 @@ import { Point, Distance, Elevation } from "./types"
  * @param points An array containing points with latitudes and longitudes
  * @returns A distance object containing the total distance and the cumulative distances
  */
-export const calculateDistance = (points: Point[]): Distance => {
+export const calculateDistance: MathHelperFunction = (
+	points: Point[]
+): Distance => {
 	const cumulativeDistance = [0]
 
 	// Incrementally calculate the distance between adjacent points until
@@ -50,13 +56,98 @@ export const haversineDistance = (point1: Point, point2: Point): number => {
 }
 
 /**
+ * Calculates duration statistics based on distance traveled and the time taken.
+ *
+ *
+ * @param points A list of points with a time
+ * @param distance A distance object containing the total distance and the cumulative distances
+ * @returns A duration object
+ */
+
+export const calculateDuration: MathHelperFunction = (
+	points: Point[],
+	distance: Distance,
+	calculOptions: Options = DEFAULT_OPTIONS
+): Duration => {
+	const { avgSpeedThreshold } = calculOptions
+	const allTimedPoints: { time: Date; distance: number }[] = []
+	const cumulative: number[] = [0]
+	let lastTime = 0
+
+	for (let i = 0; i < points.length - 1; i++) {
+		const currentPoint = points[i]
+		const time = currentPoint.time
+		const dist = distance.cumulative[i]
+		const previousPoint = cumulative[i]
+
+		if (time !== null) {
+			const movingTime = time.getTime() - lastTime
+
+			if (movingTime > 0) {
+				// Calculate average speed over the last 10 seconds
+				let sumDistances = 0
+				let sumTime = 0
+
+				for (let j = i; j >= 0; j--) {
+					const prevTime = points[j].time?.getTime()
+					if (prevTime !== undefined) {
+						const timeDiff = time.getTime() - prevTime
+						if (timeDiff > 10000) break // Only include last 10 seconds
+						sumDistances +=
+							distance.cumulative[j + 1] - distance.cumulative[j]
+						sumTime += timeDiff
+					}
+				}
+
+				const avgSpeed = sumTime > 0 ? sumDistances / sumTime : 0
+
+				// Determine if average speed indicates resting
+				const nextCumul =
+					avgSpeed > avgSpeedThreshold
+						? previousPoint + movingTime // Significant movement
+						: previousPoint // Resting, no time added
+
+				cumulative.push(nextCumul)
+			} else {
+				// Handle edge case of no movement
+				cumulative.push(previousPoint)
+			}
+
+			lastTime = time.getTime()
+			allTimedPoints.push({ time, distance: dist })
+		} else {
+			// Missing time, do not contribute to cumulative
+			cumulative.push(previousPoint)
+		}
+	}
+
+	const totalDuration =
+		allTimedPoints.length === 0
+			? 0
+			: allTimedPoints[allTimedPoints.length - 1].time.getTime() -
+			  allTimedPoints[0].time.getTime()
+
+	return {
+		startTime: allTimedPoints.length ? allTimedPoints[0].time : null,
+		endTime: allTimedPoints.length
+			? allTimedPoints[allTimedPoints.length - 1].time
+			: null,
+		cumulative,
+		movingDuration: cumulative[cumulative.length - 1] / 1000, // Convert to seconds
+		totalDuration: totalDuration / 1000, // Convert to seconds
+	}
+}
+
+/**
  * Calculates details about the elevation of the given points.
  * Points without elevations will be skipped.
  *
  * @param points A list of points with an elevation
  * @returns An elevation object containing details about the elevation of the points
  */
-export const calculateElevation = (points: Point[]): Elevation => {
+export const calculateElevation: MathHelperFunction = (
+	points: Point[]
+): Elevation => {
 	let dp = 0
 	let dn = 0
 	const elevation = []
@@ -82,9 +173,17 @@ export const calculateElevation = (points: Point[]): Elevation => {
 		}
 	}
 
+	// Find the maximum and minimum elevation
+	let max = elevation[0] ?? null
+	let min = elevation[0] ?? null
+	for (let i = 1; i < elevation.length; i++) {
+		if (elevation[i] > max) max = elevation[i]
+		if (elevation[i] < min) min = elevation[i]
+	}
+
 	return {
-		maximum: elevation.length ? Math.max(...elevation) : null,
-		minimum: elevation.length ? Math.min(...elevation) : null,
+		maximum: max,
+		minimum: min,
 		positive: Math.abs(dp) || null,
 		negative: Math.abs(dn) || null,
 		average: elevation.length ? sum / elevation.length : null,
@@ -99,7 +198,7 @@ export const calculateElevation = (points: Point[]): Elevation => {
  * @param cumulativeDistance A list of cumulative distances aquired through the `calculateDistance` method
  * @returns A list of slopes between the given points
  */
-export const calculateSlopes = (
+export const calculateSlopes: MathHelperFunction = (
 	points: Point[],
 	cumulativeDistance: number[]
 ): number[] => {
