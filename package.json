@@ -40,7 +40,7 @@
 		"pack-test": "npm pack --dry-run",
 		"preview": "vite preview",
 		"test": "vitest",
-		"postinstall": "tsc --outDir ./build"
+		"prepare": "npm run build"
 	},
 	"devDependencies": {
 		"@types/node": "^20.3.1",
