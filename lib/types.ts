@@ -45,6 +45,7 @@ export type Route = {
 	elevation: Elevation
 	duration: Duration
 	slopes: number[]
+	extensions: Extensions | null
 }
 
 export type Point = {

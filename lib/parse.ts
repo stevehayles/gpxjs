@@ -176,6 +176,7 @@ export const parseGPXWithCustomParser = (
 				negative: null,
 			},
 			slopes: [],
+			extensions: null,
 		}
 
 		const type = querySelectDirectDescendant(routeElement, "type")
@@ -189,6 +190,18 @@ export const parseGPXWithCustomParser = (
 				text: getElementValue(linkElement, "text"),
 				type: getElementValue(linkElement, "type"),
 			}
+		}
+
+		// Parse any extensions and store them in an object
+		const extensionsElement = routeElement.querySelector("extensions")
+		if (extensionsElement !== null) {
+			let extensions: Extensions = {}
+			extensions = parseExtensions(
+				extensions,
+				extensionsElement.childNodes
+			)
+
+			route.extensions = extensions
 		}
 
 		// Parse and store all points in the route
@@ -301,7 +314,7 @@ export const parseGPXWithCustomParser = (
 					extensions,
 					extensionsElement.childNodes
 				)
-				// Store all available extensions as numbers
+
 				point.extensions = extensions
 			}
 
